@@ -9,7 +9,9 @@
 #include <climits>
 #include "random.h"
 #include "omp.h"
+#include <pybind11/pybind11.h>
 
+namespace py = pybind11;
 namespace BS {
 
 
@@ -92,3 +94,9 @@ unsigned RandomUintGenerator::operator()(unsigned min, unsigned max)
 RandomUintGenerator randomUint;
 
 } // end namespace BS
+
+PYBIND11_MODULE(random, m) {
+    m.doc() = "pybind11 random plugin"; // optional module docstring
+
+    m.def("RandomUintGenerator", &RandomUintGenerator, "RNG function");
+}
