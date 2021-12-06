@@ -2,13 +2,17 @@ FROM docker.io/ubuntu:impish-20211102
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -yqq \
+	apt-utils \
 	build-essential \
 	dumb-init \
+	vim \
+	python3-dev \
 	python3-pip \
 	&& apt-get clean \
 	&& rm -rf /var/lib/apt/lists/*
 
-RUN pip install igraph
+RUN pip install igraph \
+	pip install pybind11
 
 RUN apt-get update && apt-get install -yqq \
 	cimg-dev \

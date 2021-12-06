@@ -7,14 +7,12 @@
 #include <random>
 #include <chrono>
 #include <climits>
-#include <ostream>
-#include <iostream>
 #include "random.h"
-//#include "omp.h"
-//#include <pybind11/pybind11.h>
+#include "omp.h"
+#include <pybind11/pybind11.h>
 
-//namespace py = pybind11;
-namespace BS {
+namespace py = pybind11;
+//namespace BS {
 
 /* public:
     RandomUintGenerator(bool deterministic = false);
@@ -26,7 +24,6 @@ namespace BS {
 // Default is determinstic
 RandomUintGenerator::RandomUintGenerator(bool deterministic)
 {
-    //std::cout << "deterministic " << deterministic << std::endl;
     if (deterministic) {
         // for Marsaglia
         rngx = 123456789;
@@ -71,9 +68,6 @@ uint32_t RandomUintGenerator::operator()()
         rngy ^= (rngy << 5); /* y must never be set to zero! */
         t = a * rngz + rngc;
         rngc = (t >> 32);/* Also avoid setting z=c=0! */
-        
-        uint32_t outval = rngx + rngy + (rngz = t);
-        std::cout << "rng " << outval << std::endl;
         return rngx + rngy + (rngz = t);
     } else {
         // Jenkins
@@ -83,8 +77,6 @@ uint32_t RandomUintGenerator::operator()()
         b = c + d;
         c = d + e;
         d = e + a;
-        
-        std::cout << "Jenkins rng " << d << std::endl;
         return d;
     }
 }
@@ -99,44 +91,15 @@ uint32_t RandomUintGenerator::operator()()
 unsigned RandomUintGenerator::operator()(unsigned min, unsigned max)
 {
     assert(max >= min);
-    std::cout << "min " << min << " max " << max << std::endl;
     return ((*this)() % (max - min + 1)) + min;
 }
 
 
 // The globally accessible random number generator. Threads can be
 // given their own private copies of this.
-extern RandomUintGenerator randomUint;
+RandomUintGenerator randomUint;
 
-} // end namespace BS
-
-bool getBoolVal(const std::string &s)
-{
-    if (s == "true" || s == "1")
-        return true;
-    else if (s == "false" || s == "0")
-        return false;
-    else
-        return false;
-}
-
-int main(int argc, char **argv)
-{
-    bool thisbool = getBoolVal(argv[1]);
-    std::cout << "thisbool " << thisbool << std::endl;
-    std::cout << "argc " << (int)argc << std::endl;
-    std::cout << "argv[1] " << argv[1] << std::endl;
-    //BS::unitTestBasicTypes(); // called only for unit testing of basic types
-
-    // Start the simulator with optional config filename (default "biosim4.ini").
-    // See simulator.cpp and simulator.h.
-    //BS::RandomUintGenerator();
-    auto minX = BS::randomUint(1,1);
-    std::cout << "RNG " << minX << std::endl;
-
-    return 0;
-}
-
+//} // end namespace BS
 
 /* PYBIND11_MODULE(random, m) {
     m.doc() = "pybind11 random plugin"; // optional module docstring
@@ -144,7 +107,7 @@ int main(int argc, char **argv)
     m.def("randomUint", &randomUint, "RNG function");
 } */
 
-/* PYBIND11_MODULE(randomuint, m) {
+PYBIND11_MODULE(randomuint, m) {
     py::class_<RandomUintGenerator>(m, "RNG")
         .def(py::init<bool>)
         .def(py::self)
@@ -152,7 +115,7 @@ int main(int argc, char **argv)
     //    .def(py::init<>());
 
     m.def("call_rng", &randomUint);
-} */
+}
 /* public:
     RandomUintGenerator(bool deterministic = false);
     RandomUintGenerator& operator=(const RandomUintGenerator &rhs) = default;

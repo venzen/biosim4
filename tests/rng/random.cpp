@@ -7,6 +7,8 @@
 // This modification allows compilation of a standalone RNG.
 // src/random.cpp (source file notes retained)
 
+std::string VERSION = "2.112.02";
+
 // This file provides a random number generator (RNG) for the main thread
 // and child threads. There is a global RNG instance named randomUint which
 // can be duplicated so that each thread gets a private copy. The global
@@ -16,15 +18,18 @@
 // and "RNGSeed" determine whether to initialize the RNG with a
 // user-defined deterministic seed or with a random seed.
 
-#include <cassert>
-#include <cmath>
+//#include <cassert>
+//#include <cmath>
 #include <random>
-#include <chrono>
-#include <climits>
-#include <ostream>
+//#include <chrono>
+//#include <climits>
+//#include <ostream>
 #include <iostream>
 #include <sstream>
-#include <stdlib.h>
+//#include <cmath>
+//#include <bitset>
+//#include <stdlib.h>
+//#include <string>
 #include "random.h"
 
 
@@ -132,7 +137,38 @@ RandomUintGenerator randomUint;
 } // end namespace BS
 
 // venzen:
-// Functions to sanity-check command line arguments
+// Functions to sanity-check command line arguments and
+// display usage message
+static void show_usage(std::string name)
+{
+    std::string text = 
+    "Usage: " << name << " MIN MAX [OPTION...]\n"
+    "BioSim4 random number generator\n"
+    "Example: " << name << " 1 1000 -s 1234567\n";
+    text +=
+R"(
+MIN and MAX are the range values of the random number output
+
+    MIN     an integer between -2147483647 and 2147483647
+    MAX     an integer > MIN and <= 2147483647
+
+Options:
+
+    -h, --help      display this help message and exit
+    -v, --version   output version information and exit
+    -s, --seed      provide a uint between 0 and 4294967295
+                     if provided, this option prompts the RNG
+                     to generate random numbers deterministically
+    -r, --repeat    provide an integer >= 1 to repeat generation
+    -w, --warm      this option takes no arg and warms the RNG
+                     before generating user output
+
+Report bugs to: https://github.com/davidrmiller/biosim4/issues
+)";
+        std::cerr << text << std::endl;
+        //return 0;
+}
+
 bool checkIfUint(const std::string &s)
 {
     return s.find_first_not_of("0123456789") == std::string::npos;
@@ -148,76 +184,179 @@ bool checkIfInt(const std::string &s)
     return iss.eof() && !iss.fail();
 }
 
+// As suggested in the doc __ the first 4 * 256 random numbers
+// should be discarded to warm the RNG instance.
+void warmRNG (int min, int max)
+{
+    // display the first random number for comparison
+    std::cout << "warming: " << std::endl;
+    auto thisrnd = BS::randomUint(min, max);
+    std::cout << " initial random number= " << thisrnd << std::endl;
+    for (int i=0; i<4 * 256; ++i) {
+        auto thisrnd = BS::randomUint(min, max);
+        //std::cout << i << " RN= " << thisrnd << std::endl;
+    }
+}
+
+// This RNG is adequate for the requirements of simulation,
+// but it is not considered cryptographically secure.
+// Regardless, and for the purpose of illustration, here
+// are 3 methods of producing a Bitcoin private key.
+void bitcoinPK (bool det, uint Seed)
+{
+    #include <bitset>
+    #include <cmath>
+    long nmax = 1.1578 * pow(10, 77);
+    std::string binstr = "";
+    int intnum = 0;
+    
+    BS::randomUint.initialize(det, Seed);
+    std::cout << "initialized RNG" << std::endl;
+    warmRNG(0, 1);
+    while (intnum <= nmax - 1) {
+        std::cout << "int too small: " << intnum << std::endl;
+        for (int i = 0; i < 256; ++i) {
+            binstr += BS::randomUint(0, 1);
+        }
+        intnum = stoi(binstr, 0, 2);
+    }
+    std::cout << "256 random binary bits: " << binstr << std::endl;
+    std::cout << "  int= " << intnum << std::endl;
+    std::bitset<8> set(binstr);  
+    std::cout << "  hex= " << std::hex << set.to_ulong() << std::endl;
+    //std::cout << "btcPK= " << std::hex.substr(2) << std::endl;
+}
+
+static int rndbinbits () 
+{
+    std::string binstr = "";
+    for (int i = 0; i < 256; ++i) {
+        binstr += BS::randomUint(0, 1);
+    }
+    std::cout << "256 random binary bits: " << binstr << std::endl;
+    return stoi(binstr, 0, 2);
+}
+
 
 int main(int argc, char **argv)
 {
-    bool det = false;
-    uint Seed = 0;
+    if (argc < 3) {
+        show_usage(argv[0]);
+        return 1;
+    }
     int min;
     int max;
+    uint Seed = 0;
+    bool det = false;
+    int n = 1;
+    bool warm = false;
+    bool showusage = false;
+    std::string errormsg = "";
 
-    if (argc >= 3 && argc <= 4) {
-        if (argc == 4) {
-            if (checkIfUint(argv[3])) {
-                long arg = strtol(argv[3], NULL, 10);
-                if (arg <= 4294967295) {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "-h") || (arg == "--help")) {
+            show_usage(argv[0]);
+            return 0;
+        } else if ((arg == "-v") || (arg == "--version")) {
+            std::cout << VERSION << std::endl;
+            return 0;
+        } else if ((arg == "-w") || (arg == "--warm")) {
+            warm = true;
+        } else if ((arg == "-b") || (arg == "--btcpk")) {
+            bitcoinPK(det, Seed);
+            return 0;
+        }
+
+        if ((i == 1) or (i == 2)) {
+            if (checkIfInt(argv[i])) {
+                long argmm = strtol(argv[i], NULL, 10);
+                if (argmm >= INT_MIN and argmm <= INT_MAX) {
+                    if (i == 1) {
+                        min = argmm;
+                        std::cout << "min= " << min << std::endl;
+                    } else {
+                        if (argmm > min) {
+                            max = argmm;
+                            std::cout << "max= " << max << std::endl;
+                        } else {
+                            std::cout << "max value " << argmm << " must be greater than min= " << min << std::endl;
+                            errormsg = "MAX <= MIN";
+                            break;
+                        }
+                    }
+                } else {
+                    errormsg << "arg " << i << " out of range";
+                    break;
+                }
+            } else {
+                errormsg << "arg " << i << " must be an integer";
+                break;
+            }
+            if (not errormsg.empty()) {
+                std::cerr << errormsg << std::endl;
+                show_usage(argv[0]);
+                return 1;
+            }
+        if ((arg == "-s") || (arg == "--seed")) {
+            int ii = i + 1;
+            if (checkIfUint(argv[ii])) {
+                long arg = strtol(argv[ii], NULL, 10);
+                if (arg >= 0 and arg <= 4294967295) {
                     std::cout << "seed= " << arg << std::endl;
                     Seed = arg;
                     det = true;
                 } else {
-                    std::cout << "seed value " << argv[3] << " > 4294967295 is invalid" << std::endl;
-                    return 1;
+                    std::cout << "Warning: seed value " << argv[ii] << " > 4294967295 and will produce an error" << std::endl;
+                    //return 1;
                 }
             } else {
-                std::cout << "seed value " << argv[3] << " should be an integer 0...4294967295" << std::endl;
+                std::cout << "seed value " << argv[ii] << " should be an integer 0...4294967295" << std::endl;
+                errormsg = "SEED value error";
+                show_usage(argv[0]);
                 return 1;
+                //return 1;
             }
         }
-        if (argc >= 3) {
-            if (checkIfInt(argv[1])) {
-                long arg = strtol(argv[1], NULL, 10);
-                if (arg >= 0) {
-                    std::cout << "min= " << arg << std::endl;
-                    min = arg;
+        if ((arg == "-s") || (arg == "--seed")) {
+            int ii = i + 1;
+            if (checkIfUint(argv[ii])) {
+                int arg = strtol(argv[ii], NULL, 10);
+                if (arg >= 1) {
+                    n = arg;
                 } else {
-                    std::cout << "min value " << argv[1] << " cannot be negative" << std::endl;
-                    return 1;
+                    errormsg = "MULT < 1";
+                    std::cerr << errormsg << std::endl;
                 }
             } else {
-                std::cout << "min value " << argv[1] << " should be an integer" << std::endl;
-                return 1;
-            }
-            if (checkIfInt(argv[2])) {
-                long arg = strtol(argv[2], NULL, 10);
-                if (arg > min) {
-                    std::cout << "max= " << arg << std::endl;
-                    max = arg;
-                } else {
-                    std::cout << "max value " << arg << " should be greater than min= " << min << std::endl;
-                    return 1;
-                }
-            } else {
-                std::cout << "max value " << argv[2] << " should be an integer" << std::endl;
-                return 1;
+                errormsg = "MULT should be an integer ";
+                std::cout << errormsg << argv[ii] << std::endl;
+                showusage = true;
             }
         }
-    } else if (argc == 1) {
-        std::cout << "BioSim4 RNG (standalone)" << std::endl;
-        std::cout << " takes two req. args: (int)min>=0 (int)max<=INT_MAX" << std::endl;
-        std::cout << " these are the range values of the random number output" << std::endl;
-        std::cout << " an optional third arg is a (int)seed<=4294967295" << std::endl;
-        std::cout << " if provided then the RNG output will be deterministic.\n" << std::endl;
-        return 0;
-    } else {
-        std::cout << " Invalid number of args: " << argc << "\n" << std::endl;
-        return 1;
     }
+
+/*     if (showusage) {
+        if (not errormsg.empty()) {
+            std::cout << "\nERROR: " << errormsg << std::endl;
+            usage();
+            return 1;
+        } else {
+            usage();
+            return 0;
+        }
+    } */
 
     // Initialize the random number generator
     BS::randomUint.initialize(det, Seed);
     std::cout << "initialized RNG" << std::endl;
-    auto thisrnd = BS::randomUint(min, max);
-    std::cout << "RN= " << thisrnd << std::endl;
+    if (warm) {
+        warmRNG(min, max);
+    }
+    for (int i=0; i<n; ++i) {
+        auto thisrnd = BS::randomUint(min, max);
+        std::cout << i << " RN= " << thisrnd << std::endl;
+    }
 
     return 0;
 }
