@@ -18,7 +18,7 @@ from configparser import SafeConfigParser
 #     config.write_config(a,b,c)
 from .threadutils import Signal
 
-class ToolConfig(SafeConfigParser):
+class TestConfig(SafeConfigParser):
     """ Return a config parser object with default values.
         """
 
@@ -46,10 +46,10 @@ class ToolConfig(SafeConfigParser):
         for (sect, opt, default) in defaults:
             self._default(sect, opt, default)
 
-    def save(self):
+    def save(self, sort):
         """save the config to the .ini file"""
         with open(self.filename, 'w') as configfile:
-            self.write(configfile, space_around_delimiters=True)
+            self.write(configfile, sort, space_around_delimiters=True)
 
     def load(self):
         """(re)load the config from the .ini file"""
@@ -99,6 +99,42 @@ class ToolConfig(SafeConfigParser):
             self.set(section, option, default)
             self.save()
     
+    def write(self, fp, sort=False, space_around_delimiters=True):
+        """Write an .ini-format representation of the configuration state.
+
+        If `space_around_delimiters' is True (the default), delimiters
+        between keys and values are surrounded by spaces.
+
+        Please note that comments in the original configuration file are not
+        preserved when writing the configuration back.
+        """
+        if space_around_delimiters:
+            d = " {} ".format(self._delimiters[0])
+        else:
+            d = self._delimiters[0]
+        if self._defaults:
+            self._write_section(fp, self.default_section,
+                                    self._defaults.items(), d)
+        for section in self._sections:
+            self._write_section(fp, section,
+                                self._sections[section].items(), d, sort)
+
+    def _write_section(self, fp, section_name, section_items, delimiter, sort):
+        """Write a single section to the specified `fp'."""
+        fp.write("[{}]\n".format(section_name))
+        if sort:
+            section_items = sorted(section_items)
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+            if value is not None or not self._allow_no_value:
+                value = delimiter + str(value).replace('\n', '\n\t')
+            else:
+                value = ""
+            fp.write("{}{}\n".format(key, value))
+        fp.write("\n")
+
+
     ##
     # functions for managing .ini file options
     #

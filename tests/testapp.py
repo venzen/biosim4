@@ -11,6 +11,8 @@ _modname = "%s_mod.py" % _appname
 _uiname = "%s_ui" % _appname
 _libname = "%s_lib" % _appname
 _configfile = "%stest.ini" % _appname
+# temporary file used by this app to create test configurations 
+_temp_ini = "tmp.ini" 
 _version = "21.12.03"
 
 
@@ -44,7 +46,7 @@ To see a list of commands run:
 If you already know which configured test you want to run,
 simply specify its name:
 
-    python3 %s -t quicktest
+    python3 %s quicktest
 
 or type 'h' while running the user interface.
 
@@ -79,39 +81,15 @@ argp = argparse.ArgumentParser(
     + " and trading bot experimentation framework"
 )
 argp.add_argument(
-    "--module",
-    action="store",
-    default=_modname,
-    help="name of module files, comma separated list, default=marginwatch.py",
-)
-argp.add_argument(
-    "--port", action="store", default="5510", help="specify the SUB ZeroMQ port"
-)
-argp.add_argument(
-    "--address",
-    action="store",
-    default=None,
-    help="specify the ZeroMQ trades PUB address",
-)
-argp.add_argument(
-    "--setup-account",
-    action="store_true",
-    help="prompt for API secret, encrypt it and then exit."
-    "Specify acc1 or acc2 using the --acc option",
-)
-argp.add_argument(
-    "--colors",
-    action="store_true",
-    help="prompt for instrument colors, store and exit.",
-)
-argp.add_argument(
-    "--offline",
+    "--available",
     action="store_true",
     default=False,
-    help="simulation mode using locally stored positions and orders",
+    help="see a list of configured simulation tests"
 )
 argp.add_argument(
-    "--usage", action="store_true", help="see more detailed usage instructions"
+    "--usage", 
+    action="store_true", 
+    help="see more detailed usage instructions"
 )
 
 args = argp.parse_args()
@@ -120,43 +98,32 @@ if args.usage:
     print(usagemsg)
     exit(0)
 
+try:
+    print("passed argv[1]:", argv[1])
+    if not argv[1].startwith("-"):
+        testsim = argv[1]
+except:
+    print("no argv[1]. Proceeding to menu...")
+    testsim = None
 
 import locale
-from os import path
+from pathlib import Path
 #from os.path import expanduser
 from pylib import config
 import testui
 #import subprocess
-from sys import stdout, stderr
+#from sys import stdout, stderr
 
 # the following is for initial config file creation.
 # Don't edit here, it will have no effect.
-# Instead, use commandline args to make config changes
-# The 'ui' section defines colors that are used to display instruments consistently
-# across various satellite apps. Avoid red, blue & green.
-BS_DEFAULTS1 = [
-    ["internal", "name", _appname],
-    ["internal", "version", _version],
-    ["internal", "github_url", "https://github.com/davidrmiller/biosim4/"],
-    ["quicktest", "description", "Quick test that only runs a few seconds"],
-    ["quicktest-params", "stepsPerGeneration", "100"],
-    ["quicktest-params", "maxGenerations", "2"],
-    ["quicktest-results", "generations", "100"],
-    ["quicktest-survivors", "min", "980"],
-    ["quicktest-survivors", "max", "1050"],
-    ["quicktest-diversity", "min", "0.98465"],
-    ["quicktest-diversity", "max", "0.999"],
-    ["slowtest", "description", "Slow test that runs for years"],
-    ["slowtest-params", "stepsPerGeneration", "10000"]
-]
 
-BS_DEFAULTS2 = [
+BS_DEFAULTS = [
     ["internal", "name", _appname],
     ["internal", "version", _version],
     ["internal", "github_url", "https://github.com/davidrmiller/biosim4/"],
     ["quicktest", "description", "Quick test that only runs a few seconds"],
     ["quicktest", "param-stepsPerGeneration", "100"],
-    ["quicktest", "params-maxGenerations", "2"],
+    ["quicktest", "param-maxGenerations", "2"],
     ["quicktest", "result-generations", "100"],
     ["quicktest", "result-survivors-min", "980"],
     ["quicktest", "result-survivors-max", "1050"],
@@ -178,18 +145,27 @@ for loc in ["en_US.UTF8", "en_EN", "C"]:
 # Check paths and files
 #currentdir = path.dirname(__file__)
 try:
-    testspath = Path(__file__)
-    assert testspath == Path.cwd()
-    configspath = testspath.joinpaths("configs", _configfile))
-    configfile = configspath.joinpaths(_configfile)
+    thispath = Path(__file__)
+    assert thispath.parent == Path.cwd()
+    testspath = thispath.parent
+    print("working in", str(Path.cwd()))
+    configspath = testspath.joinpath("configs")
+    print("app configpath:", configspath)
+    configfile = configspath.joinpath(_configfile)
+    print("app configfile:", configfile)
     biosimpath = testspath.parent
-    defaultconfigfile = biosimpath.joinpaths("biosim4.ini"))
+    defaultconfigfile = biosimpath.joinpath("biosim4.ini")
     # May not exist at this time:
     #logfile = ".logs/epoch-log.txt"
-    print("testconfig: %s" % filepath)
+    #print("testconfig: %s" % filepath)
     print("defaultconfig: %s" % defaultconfigfile)
-    if sim:
-        simfile = configspath.joinpaths(simname)
+    # biosim4 does not like an abspath to configfile:
+    #tempini = configspath.joinpath(_temp_ini)
+    # So, map temporary ini file relative to project root:
+    #tempini = "./tests/configs/%s" % _temp_ini
+    # Nah, just send the filename _temp_ini
+    if testsim:
+        simfile = configspath.joinpath(testsim, ".ini")
         print("sim config: %s" % simfile)
 except AssertionError:
     print("testapp.py must be executed in the 'tests' directory")
@@ -199,14 +175,14 @@ except Exception as e:
     exit(1)
 
 #thisconfig = config.ToolConfig("./configs/%s" % (_configfile))
-thisconfig = config.ToolConfig(str(configfile))
-thisconfig.init_defaults(BS_DEFAULTS2)
+thisconfig = config.TestConfig(str(configfile))
+thisconfig.init_defaults(BS_DEFAULTS)
 
 #TODO read default configfile to create simfile containing all params (or have biosim4 add provided params to hardcoded default params)
 #TODO implement passing test to run from cmd line (prior to menu)
 #TODO add new test via --add arg + provide ini file
 
 #test_cli ?
-testui.main(thisconfig, simname)
+testui.main(thisconfig, _temp_ini, testsim)
 
 print("%s shutdown complete" % _appname)
