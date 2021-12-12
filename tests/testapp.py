@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-""" This script initializes the BioSim4 testing environment
-    and menu interface.
+""" This script runs a sim test of a biosim4 configuration.
     """
 
 _initname = __file__[:-3]  # exclude .py
@@ -30,7 +29,7 @@ if platform != "linux":
     print("\nReport bugs to https://github.com/davidrmiller/biosim4/\n")
 
 
-usagemsg = """\nBioSim4 testing utilities.
+usagemsg = """\nbiosim4 test application.
 \nThis script initializes the BioSim4 testing environment
     and menu interface. It provides utilities for ... testing biosim4 ... configure sim parameters
 etc.
@@ -81,10 +80,44 @@ argp = argparse.ArgumentParser(
     + " and trading bot experimentation framework"
 )
 argp.add_argument(
-    "--available",
+    "--test",
+    type = str,
+    #action="store_true",
+    default=None,
+    help="use this simulation test configuration"
+)
+argp.add_argument(
+    "--show",
     action="store_true",
-    default=False,
+    #type = str,
+    default=None,
     help="see a list of configured simulation tests"
+)
+argp.add_argument(
+    # this should show both test amd result params
+    "--params",
+    action="store_true",
+    #type = str,
+    default=None,
+    help="use with --test to see the specified test's config params"
+)
+argp.add_argument(
+    # no, the user should only see results after actually
+    # running a test
+    "--results",
+    action="store_true",
+    #type = str,
+    default=None,
+    help="use with --test to see the specified test's last results"
+)
+argp.add_argument(
+    "--check",
+    action="store_true",
+    #type = str,
+    default=None,
+    help="check the test environment"
+    # show color [Yes] or [No] env checks
+    # offer to repair, else --repair
 )
 argp.add_argument(
     "--usage", 
@@ -100,17 +133,20 @@ if args.usage:
 
 try:
     print("passed argv[1]:", argv[1])
-    if not argv[1].startwith("-"):
-        testsim = argv[1]
+    #if not argv[1].startwith("-"):
+    testsim = argv[1]
 except:
-    print("no argv[1]. Proceeding to menu...")
-    testsim = None
+    print("no argv[1]. Showing usage...")
+    #testsim = None
+    print(usagemsg)
+    exit(1)
 
 import locale
 from pathlib import Path
 #from os.path import expanduser
 from pylib import config
-import testui
+import testlib
+#import testui
 #import subprocess
 #from sys import stdout, stderr
 
@@ -123,7 +159,7 @@ BS_DEFAULTS = [
     ["internal", "github_url", "https://github.com/davidrmiller/biosim4/"],
     ["quicktest", "description", "Quick test that only runs a few seconds"],
     ["quicktest", "param-stepsPerGeneration", "100"],
-    ["quicktest", "param-maxGenerations", "2"],
+    ["quicktest", "param-maxGenerations", "101"],
     ["quicktest", "result-generations", "100"],
     ["quicktest", "result-survivors-min", "980"],
     ["quicktest", "result-survivors-max", "1050"],
@@ -178,11 +214,33 @@ except Exception as e:
 thisconfig = config.TestConfig(str(configfile))
 thisconfig.init_defaults(BS_DEFAULTS)
 
+if args.show:
+    print("args.show: ", args.show)
+    tests = testlib.showTests(thisconfig)
+    for t in tests:
+        print(t)
+elif args.test:
+    try:
+        t = testlib.getTestSection(thisconfig, args.test)
+        print("will run %s sim" % t.name)
+        print(t['description'])
+        print(dir(t))
+    except Exception as e:
+        print("test exception:\n%s" % e)
+        exit(1)
+    
+    if args.params:
+        for k in sorted(t):
+            print("%s= %s" % (k, t[k]))
+        exit(0)
+    if args.results:
+        testlib.resultsAnalysis(thisconfig, args.test)
+
 #TODO read default configfile to create simfile containing all params (or have biosim4 add provided params to hardcoded default params)
 #TODO implement passing test to run from cmd line (prior to menu)
 #TODO add new test via --add arg + provide ini file
 
 #test_cli ?
-testui.main(thisconfig, _temp_ini, testsim)
+#testui.main(thisconfig, _temp_ini, testsim)
 
-print("%s shutdown complete" % _appname)
+print("%s done" % _appname)

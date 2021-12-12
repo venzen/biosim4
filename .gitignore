@@ -1,3 +1,14 @@
-obj/
-logs/epoch-log.txt
-*.pyc
+# Ignore everything in this directory
+#*
+# Except this file
+#!.gitignore
+.gitignore
+.vscode
+.editorconfig
+.idea
+*__pycache__
+*.py[cod]
+/venv
+/bin
+/logs
+/images

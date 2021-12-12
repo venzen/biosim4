@@ -20,6 +20,15 @@ def updateSections(thisconfig):
     raise NotImplementedError
 
 
+def showTests(thisconfig):
+    """ display all test sections in app config file
+        """
+    sections = thisconfig.sections()
+    tests = [s for s in sections if s != "internal"]
+    
+    return tests
+
+
 def getTestSection(thisconfig, testname):
     """ Select the test section 'testname' from the
         test config object. 
