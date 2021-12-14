@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-""" This script runs a sim test of a biosim4 configuration.
+""" This script runs a simulation test of a biosim4 configuration.
     """
 
 _initname = __file__[:-3]  # exclude .py
@@ -10,9 +10,9 @@ _modname = "%s_mod.py" % _appname
 _uiname = "%s_ui" % _appname
 _libname = "%s_lib" % _appname
 _configfile = "%stest.ini" % _appname
-# temporary file used by this app to create test configurations 
+# temporary file used by this app to create test configurations:
 _temp_ini = "tmp.ini" 
-_version = "21.12.03"
+_version = "21.12.12"
 
 
 from sys import version_info, platform, argv, exit
@@ -24,103 +24,125 @@ except:
     exit(1)
 
 if platform != "linux":
-    print("\nThis test utility was developed on Linux")
-    print("If running on any other OS, your mileage may vary.")
+    print("\nThis test application is running on %s" % platform)
     print("\nReport bugs to https://github.com/davidrmiller/biosim4/\n")
 
 
-usagemsg = """\nbiosim4 test application.
-\nThis script initializes the BioSim4 testing environment
-    and menu interface. It provides utilities for ... testing biosim4 ... configure sim parameters
-etc.
+usagemsg = """\nScript for testing a biosim4 simulation.
+\ntest.py initializes a test environment and simulation parameters for a biosim4 simulation. Always execute test.py inside the 'tests' working directory. To see a list of configured tests, use the --show flag:
 
-To use this utility interactively simply start the menu driven user interface:
+    python3 test.py --show
 
-    python3 %s menu
+Run the pre-defined simulation test:
 
-To see a list of commands run:
+    python3 test.py --test quicktest
 
-    python3 %s help
+To see all available options and flags, run:
 
-If you already know which configured test you want to run,
-simply specify its name:
+    python3 test.py --help
 
-    python3 %s quicktest
 
-or type 'h' while running the user interface.
+Simulation parameters:
 
-* Python version 3 minimum. 
+This script uses its own configuration file 'test.ini' for storing and retrieving two sets of parameters:
+
+1) simulation parameters, and
+2) expected simulation outcome results
+
+Inspect './configs/test.ini' to see the predefined example 'quicktest'. This test's simulation and result parameters can also be output to the console:
+
+    python3 test.py --test quicktest --params
+
+
+Configure a new test:
+
+1. Copy the default config file 'biosim4.ini' to the 'configs' directory and rename the copy with the unique name of your new test:
+
+    cp ../biosim4.ini ./configs/my_new_test.ini
+
+2. Edit the new test's parameters in './configs/my_new_test.ini'
+3. Import the test parameters into the test environment:
+
+    python3 test.py --import my_new_test.ini
+
+Simulation parameters (from .configs/my_new_test.ini) are converted to test-style format and stored in a new section 'my_new_test' in the configuration file './configs/test.ini'
+
+After being imported, test parameters can be edited directly in the 'test.ini' file.
+
+Result parameters:
+
+Result parameters can be manually added to the config file, or they can be initialed automatically by simply running a test simulation:
+
+    python3 test.py --test my_new_test
+
+After completing the simulation, the script will propose to add result parameters (using actual test result values) to the config file. These can then be manually edited to match variations in test results.
 """ % (
     argv[0],
     argv[0],
     argv[0],
 )
 
-helpmsg = """\nFirstly, be sure that you are executing this script in the tests directory.  
-
-To use this utility simply start the menu driven user interface:
-
-    python3 %s menu
-
-Available commands are:
-
-    ...
-    ...                                                  
-
-""" % (
-    argv[0]
-)
 
 import argparse
 
-# before we can start the user interface we check
-# args passed from the command line,
+# check args passed from the command line,
 argp = argparse.ArgumentParser(
-    description = "Trade monitor of RESTful API data"
-    + " and trading bot experimentation framework"
+    description = "Application for running biosim4"
+    + " simulation tests"
 )
 argp.add_argument(
+    # use this test section
     "--test",
+    "-t",
     type = str,
-    #action="store_true",
     default=None,
     help="use this simulation test configuration"
 )
 argp.add_argument(
+    # show all test sections found in the config file
     "--show",
+    "-s",
     action="store_true",
-    #type = str,
     default=None,
     help="see a list of configured simulation tests"
 )
 argp.add_argument(
-    # this should show both test amd result params
+    # this shows both test amd result params
     "--params",
+    "-p",
     action="store_true",
-    #type = str,
     default=None,
     help="use with --test to see the specified test's config params"
 )
 argp.add_argument(
-    # no, the user should only see results after actually
-    # running a test
-    "--results",
+    # show result params only
+    "--resultparams",
+    "-r",
     action="store_true",
-    #type = str,
     default=None,
     help="use with --test to see the specified test's last results"
 )
 argp.add_argument(
     "--check",
+    "-c",
     action="store_true",
-    #type = str,
     default=None,
     help="check the test environment"
-    # show color [Yes] or [No] env checks
+    # TODO show color [Yes] or [No] env checks
     # offer to repair, else --repair
 )
 argp.add_argument(
-    "--usage", 
+    # use this test section
+    "--load",
+    "-l",
+    type = str,
+    default=None,
+    help="import parameters for a new test configuration\n"
+            + "provide the name of the source .ini file in ./configs/"
+)
+argp.add_argument(
+    "--usage",
+    "-u", 
     action="store_true", 
     help="see more detailed usage instructions"
 )
@@ -131,27 +153,22 @@ if args.usage:
     print(usagemsg)
     exit(0)
 
-try:
-    print("passed argv[1]:", argv[1])
-    #if not argv[1].startwith("-"):
-    testsim = argv[1]
-except:
-    print("no argv[1]. Showing usage...")
-    #testsim = None
-    print(usagemsg)
-    exit(1)
+
+#
+# We made it this far without incident or exiting
+# Load additional modules for environment set-up.
 
 import locale
+import time
+from datetime import timedelta
 from pathlib import Path
-#from os.path import expanduser
 from pylib import config
 import testlib
-#import testui
-#import subprocess
-#from sys import stdout, stderr
+
 
 # the following is for initial config file creation.
 # Don't edit here, it will have no effect.
+# Instead, add/edit parameters in _configfile 
 
 BS_DEFAULTS = [
     ["internal", "name", _appname],
@@ -170,7 +187,7 @@ BS_DEFAULTS = [
 ]
 
 
-# set US locale to ensure well defined behavior for number formatting.
+# set US locale to ensure well-defined behavior for number formatting.
 for loc in ["en_US.UTF8", "en_EN", "C"]:
     try:
         locale.setlocale(locale.LC_NUMERIC, loc)
@@ -179,30 +196,23 @@ for loc in ["en_US.UTF8", "en_EN", "C"]:
         continue
 
 # Check paths and files
-#currentdir = path.dirname(__file__)
 try:
     thispath = Path(__file__)
     assert thispath.parent == Path.cwd()
     testspath = thispath.parent
-    print("working in", str(Path.cwd()))
     configspath = testspath.joinpath("configs")
-    print("app configpath:", configspath)
     configfile = configspath.joinpath(_configfile)
-    print("app configfile:", configfile)
     biosimpath = testspath.parent
     defaultconfigfile = biosimpath.joinpath("biosim4.ini")
     # May not exist at this time:
     #logfile = ".logs/epoch-log.txt"
     #print("testconfig: %s" % filepath)
-    print("defaultconfig: %s" % defaultconfigfile)
+    
     # biosim4 does not like an abspath to configfile:
     #tempini = configspath.joinpath(_temp_ini)
     # So, map temporary ini file relative to project root:
     #tempini = "./tests/configs/%s" % _temp_ini
-    # Nah, just send the filename _temp_ini
-    if testsim:
-        simfile = configspath.joinpath(testsim, ".ini")
-        print("sim config: %s" % simfile)
+    # afterthought: just use the filename _temp_ini (defined at top of this file)
 except AssertionError:
     print("testapp.py must be executed in the 'tests' directory")
     exit(1)
@@ -210,37 +220,104 @@ except Exception as e:
     print("Environment exception:\n%s" % e)
     exit(1)
 
-#thisconfig = config.ToolConfig("./configs/%s" % (_configfile))
+
+#
+# instantiate configparser 
+#
 thisconfig = config.TestConfig(str(configfile))
 thisconfig.init_defaults(BS_DEFAULTS)
 
+if args.load:
+    param_src = None
+    try:
+        param_src = Path.cwd().joinpath("configs", fname)
+        assert param_src.exists()
+    except:
+        print("\n%s not found in the ./configs/ directory\n" % param_src)
+        exit(1)
+    stem = param_src.stem
+    thisname = stem.name
+    # add section with thisname, exit if thisname already exists
+    try:
+        thisconfig.add_section(thisname)
+    except:
+        print("add_section exception: section named %s already exists" % thisname)
+    try:
+        testlib.loadStdParamsFromFile(thisconfig, thisname, param_src)
+    except Exception as e:
+        print("load exception: ", e)
+        exit(1)
+    try:
+        testlib.writeTestParamsToConfig(thisconfig, False)
+    except Exception as e:
+        print("save exception: ", e)
+        exit(1)
+
+if args.check:
+    print("working in", str(Path.cwd()))
+    print("app configpath:", configspath)
+    print("app configfile:", configfile)
+    print("Ref: biosim4 default config file: %s" % defaultconfigfile)
+    exit(0)
 if args.show:
-    print("args.show: ", args.show)
     tests = testlib.showTests(thisconfig)
+    print("\nConfigured tests:\n")
     for t in tests:
         print(t)
+    print()
 elif args.test:
+    #TODO change writeStdTestFile() to take t (section) as arg
+    t = testlib.getTestSection(thisconfig, args.test)
+    if args.params:
+        print("\n%s parameters:\n" % args.test)
+        for k in sorted(t):
+            if k.startswith('param'):
+                print("%s= %s" % (k, t[k]))
+        try:
+            resdict, comp = testlib.getResultParams(thisconfig, args.test)
+            testlib.showResultParams(resdict)
+        except Exception as e:
+            print("Exception getting results params:\n%s" % e)
+        exit(0)
+
+    if args.resultparams:
+        try:
+            resdict, comp = testlib.getResultParams(thisconfig, args.test)
+            testlib.showResultParams(resdict)
+        except Exception as e:
+            print("Exception getting results params:\n%s" % e)
+        exit(0)
     try:
-        t = testlib.getTestSection(thisconfig, args.test)
-        print("will run %s sim" % t.name)
+        testlib.TEMPinifile = _temp_ini
+        print("Running %s sim" % t.name)
         print(t['description'])
-        print(dir(t))
+        #print(dir(t))
+        testlib.writeStdTestFile(thisconfig, args.test)
+        # start objetive time
+        start_time = time.monotonic()
+        # start processor time
+        cpu_start_time = time.perf_counter()
+        #
+        # simulation run
+        proc = testlib.runTest()
+        #
+        cpu_end_time = time.perf_counter()
+        end_time = time.monotonic()
+        print(proc)
+        print("completed test")
+        print("clock time: %s seconds" % timedelta(seconds=end_time - start_time))
+        print("CPU time: %s seconds" % (cpu_end_time - start_time))
+        #ll = testlib.readlog()
+        testlib.resultsAnalysis(thisconfig, args.test)
     except Exception as e:
         print("test exception:\n%s" % e)
         exit(1)
-    
-    if args.params:
-        for k in sorted(t):
-            print("%s= %s" % (k, t[k]))
-        exit(0)
-    if args.results:
-        testlib.resultsAnalysis(thisconfig, args.test)
+else:
+    print("\nYou must specify the name of a test configuration\n")
+    print("Example:\tpython3 %s --test quicktest [other options]" % _appname)
+    print("\nTo see the available test config names, run:\n")
+    print("\tpython3 %s --show\n" % _appname)
 
-#TODO read default configfile to create simfile containing all params (or have biosim4 add provided params to hardcoded default params)
-#TODO implement passing test to run from cmd line (prior to menu)
-#TODO add new test via --add arg + provide ini file
-
-#test_cli ?
-#testui.main(thisconfig, _temp_ini, testsim)
 
 print("%s done" % _appname)
+exit(0)

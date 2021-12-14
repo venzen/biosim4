@@ -1,5 +1,7 @@
+""" Test application functions for manipulating parameters,
+    running a simulation test, and analysing results. 
+    """
 
-#from time import sleep, ctime
 from pathlib import Path
 import subprocess
 from pylib import config
@@ -8,8 +10,8 @@ global TEMPinifile
 TEMPinifile = None
 
 
-#TODO initialize object (perhaps istantiate class singleton?)
-# sectionss, active class, 
+#TODO initialize object (perhaps instantiate a class singleton)
+# attributes: sections, active class, etc 
 # update sections if added, deleted, modified
 
 def updateSections(thisconfig):
@@ -33,14 +35,13 @@ def getTestSection(thisconfig, testname):
     """ Select the test section 'testname' from the
         test config object. 
         """
-    #print("getting config section from ", thisconfig)
-    #print("testname ", testname)
+
     s = None
     try:
         s = thisconfig[testname]
     except KeyError:
         print("section '%s' does not exist")
-        # create it here
+        # create it here?
     except Exception as e:
         print("getTestSection() exception:\n", e)
 
@@ -74,7 +75,7 @@ def readTestParamsFromConfig(thisconfig):
         # keys and values from '.tests/configs/testapp.ini'
         # this filename is an attribute of the config class
         thisconfig.load()
-        print("Success.\n")
+        print("Configuration reloaded.\n")
     except Exception as e:
         print("readTestParams() exception:\n%s" % e)
 
@@ -140,7 +141,7 @@ def loadStdParamsFromFile(thisconfig, testname, param_src):
     section = getTestSection(thisconfig, testname)
     try:
         for k, v in sectiondict.items():
-            # check k against default ref params for validity
+            #TODO check k against default ref params for validity
             k = "param-" + k
             section[k] = v
 
@@ -180,8 +181,8 @@ def writeStdTestFile(thisconfig, testname):
         print("writeTestFile() exception: %s" % e)
 
     
-def runtest():
-    """ docstring
+def runTest():
+    """ Execute biosim4 binary using the 'subprocess' module
         """
 
     global TEMPinifile
@@ -195,21 +196,21 @@ def runtest():
     return process
     
 
-def readlog():
-    """ docstring
+def readLog():
+    """ Read the biosim4 log file and return the last line.
         """
-    # analysis
-    #path = Path(__file__).parent.joinpath('logs/epoch-log.txt')
+
     with open('../logs/epoch-log.txt', 'r') as log:
+        print("readLog(): ", log)
         for line in log:
             pass
-        #last_line = line
 
     return line
 
 
 def getResultParams(thisconfig, testname):
-    """ docstring
+    """ Read the test app config file and filter for
+        result parameters. Return a dictionary.
         """
 
     section = getTestSection(thisconfig, testname)
@@ -217,7 +218,6 @@ def getResultParams(thisconfig, testname):
     for k, v in section.items():
         if 'result' in k:
             kk = str.split(k, "-", 1)  #only split at first "-"
-            #print("k, kk", kk)
             try:
                 v = int(v)
             except:
@@ -240,11 +240,11 @@ def showResultParams(resultdict):
     # display params in dict 
     if len(resultdict) > 0:
         count = 0
-        print("\ndefined result params:\n")
+        print("\nDefined result params:\n")
         for k, v in resultdict.items():
             print("%s= %s" % (k, v))
             count += 1
-        print("%i result param(s) missing" % (7 - count))
+        print("\n%i result param(s) missing" % (7 - count))
     else:
         print("\nthis test has no result params defined")
 
@@ -258,7 +258,7 @@ def resultsAnalysis(thisconfig, testname):
         result-kills = int
         """
     
-    last_line = readlog()
+    last_line = readLog()
     reslist = str.split(last_line)
     print("reslist: ", reslist)
     if len(reslist) != 5:
@@ -270,16 +270,14 @@ def resultsAnalysis(thisconfig, testname):
     print("rp: ", rp)
     addrp = False
     addrpdict = dict()
-    #updaterps = False
+
     if not complete:
         # either:
         # 1) no results defined
         # 2) incomplete set of resultparams (7)
-        # offer to create result params from this test
-        #updateResultParams() and write to test config file
         print("incomplete set of results params")
         showResultParams(rp)
-        print("\nYou can cancel and manually update the test config file with the missing params, then reload it and run this test again. Or proceed and the missing result params will be added to this test's config\n")
+        print("\nYou can cancel and manually update the test config file with the missing params, and then run this test again. Or proceed and the missing result params will be added to this test's configuration\n")
         uadd = input("proceed and add result params? (Y/n) ")
         if uadd in ["y", "Y"]:
             addrp = True
@@ -293,14 +291,13 @@ def resultsAnalysis(thisconfig, testname):
     except Exception as e:
         print("\nexception reading logfile:" % e)
 
-    # conditionsals below could be done with a loop that
+    #TODO conditionsals below could be done with a loop that
     # calls a fn() addOrUpdateResultParam()
-    # could use param 'maxgenerations' - 1 here, instead...
+    #TODO could use param 'maxgenerations' - 1 here, instead...
     if 'generations' in rp:
         if generation != rp['generations']:
             print("Error: generation:: expected %i, got %i" % (rp['generations'], generation))
             success = 0
-            # option to update result param
     elif addrp:
         print("adding param 'result-generations = %s' to config" % generation)
         addrpdict['result-generations'] = generation
