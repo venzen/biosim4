@@ -10,6 +10,7 @@
 **/*.ini
 venv
 bin
+src
 logs
 images
 tests/testui.py
