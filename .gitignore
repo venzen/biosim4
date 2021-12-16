@@ -2,13 +2,16 @@
 #*
 # Except this file
 #!.gitignore
-.gitignore
+.github
 .vscode
 .editorconfig
 .idea
-*__pycache__
-*.py[cod]
-/venv
-/bin
-/logs
-/images
+*/__pycache__
+**/*.ini
+venv
+bin
+logs
+images
+tests/testui.py
+tests/configs/*.ini
+**/.gitignore

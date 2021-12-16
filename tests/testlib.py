@@ -10,7 +10,7 @@ global TEMPinifile
 TEMPinifile = None
 
 
-#TODO initialize object (perhaps instantiate a class singleton)
+#TODO initialize object (perhaps instantiate a class singleton)?
 # attributes: sections, active class, etc 
 # update sections if added, deleted, modified
 
@@ -40,8 +40,8 @@ def getTestSection(thisconfig, testname):
     try:
         s = thisconfig[testname]
     except KeyError:
-        print("section '%s' does not exist")
-        # create it here?
+        print("section '%s' does not exist" % testname)
+        # create it here or prefer user to deliberately add?
     except Exception as e:
         print("getTestSection() exception:\n", e)
 
@@ -80,13 +80,14 @@ def readTestParamsFromConfig(thisconfig):
         print("readTestParams() exception:\n%s" % e)
 
 
-def writeTestParamsToConfig(thisconfig, sort):
+def writeTestParamsToConfig(thisconfig, sort=False):
     """ Save the test config object to test config INI file.
         """
     try:
         # the config module's save() method writes section
         # keys and values to '.tests/configs/testapp.ini'
-        # this filename is an attribute of the config class
+        # this filename is already an attribute of the 
+        # config class, so no need to specify it here
         thisconfig.save(sort)
         print("Success.\n")
     except Exception as e:
@@ -162,9 +163,6 @@ def writeStdTestFile(thisconfig, testname):
     s = getTestSection(thisconfig, testname)
 
     try:
-        #if not TEMPinifile.exists():
-        #    source.replace(destination)
-
         # get the absolute path to 'tmp.ini'
         pathstr = "./configs/%s" % TEMPinifile
         relpath = Path(pathstr)
@@ -182,30 +180,18 @@ def writeStdTestFile(thisconfig, testname):
 
     
 def runTest():
-    """ Execute biosim4 binary using the 'subprocess' module
+    """ Execute the biosim4 binary using the 'subprocess' module
         """
 
     global TEMPinifile
 
     relpath = "./tests/configs/%s" % TEMPinifile
     shellcmd = "./bin/Release/biosim4 %s" % relpath
-    print("Running the simulation...")
+    print("Running the simulation...\n")
     # launch biosim4
     process = subprocess.run(shellcmd, cwd='../', shell=True, capture_output=False, text=True, check=True)
     
     return process
-    
-
-def readLog():
-    """ Read the biosim4 log file and return the last line.
-        """
-
-    with open('../logs/epoch-log.txt', 'r') as log:
-        print("readLog(): ", log)
-        for line in log:
-            pass
-
-    return line
 
 
 def getResultParams(thisconfig, testname):
@@ -233,10 +219,13 @@ def updateResultParams(thisconfig, testname, addrpdict):
     section = getTestSection(thisconfig, testname)
     for k, v in addrpdict.items():
         section[k] = str(v)
+    #thisconfig.write_config_setting(testname, k, v)
 
 
 def showResultParams(resultdict):
-
+    """ can be called after getResultParams() to see the result params in resultdict returned by getResultParams() 
+    returns True after displaying dict items
+    """
     # display params in dict 
     if len(resultdict) > 0:
         count = 0
@@ -248,7 +237,32 @@ def showResultParams(resultdict):
     else:
         print("\nthis test has no result params defined")
 
-def resultsAnalysis(thisconfig, testname):
+
+def readLog(results_log):
+    """ Read the biosim4 log file and return the last line.
+        return a dictionary of results
+        """
+    logfile = '../logs/%s' % results_log
+    with open(logfile, 'r') as log:
+        for line in log:
+            pass
+        last_line = line
+    try:
+        reslist = str.split(last_line)
+        resdict = {
+            'generation' : int(reslist[0]),
+            'survivors' : int(reslist[1]),
+            'diversity' : float(reslist[2]),
+            'genomeSize' : int(reslist[3]),
+            'kills' : int(reslist[4])
+        }
+        return resdict
+    except Exception as e:
+        print("readLog() exception:\n%s" % e)
+        return False
+
+
+def resultsAnalysis(thisconfig, testname, results_log, adjust=False):
     """ result-generations = int
         result-survivors-min = int
         result-survivors-max = int
@@ -258,98 +272,185 @@ def resultsAnalysis(thisconfig, testname):
         result-kills = int
         """
     
-    last_line = readLog()
-    reslist = str.split(last_line)
-    print("reslist: ", reslist)
-    if len(reslist) != 5:
-        print("Error: unexpected line length in logfile:")
-        print(last_line)
+    global addrpdict
+    addrpdict = dict()
+
+    def pad(thisobj, maxlen=16):
+        """ calc diff between str(thisobj) and maxlen
+            return diff number of space chars """
+        sl = len(str(thisobj))
+        return " " * (maxlen - sl)
+
+    def add(key ,val, minmax=False):
+        """ add key, val to global dictionary addrpdict
+            if minmax == True then add 2 params """
+        global addrpdict
+        paramlist = list()
+        if minmax:
+            for suffix in ['-min', '-max']:
+                newkey = 'result-' + key + suffix
+                paramlist.append(newkey)
+        else:
+            paramlist.append('result-' + key)
+        action = "adding"
+        if adjust:
+            action = "updating"
+        for k in paramlist:
+            print("%s param '%s = %s' to config" % (action, k, val))
+            addrpdict[k] = val
+
+
+    resdict = readLog(results_log)
+    if not resdict:
+        print("resultsAnalysis: Error in logfile %s" % results_log)
+        print("unable to proceed with results analysis")
         exit(1)
 
+    # expected results from result params in config file
     rp, complete = getResultParams(thisconfig, testname)
-    print("rp: ", rp)
     addrp = False
-    addrpdict = dict()
 
     if not complete:
         # either:
         # 1) no results defined
-        # 2) incomplete set of resultparams (7)
+        # 2) incomplete set of resultparams 
         print("incomplete set of results params")
         showResultParams(rp)
-        print("\nYou can cancel and manually update the test config file with the missing params, and then run this test again. Or proceed and the missing result params will be added to this test's configuration\n")
+        # also, let's make our lives easy and avoid shooting at
+        # moving targets - first establish a complete set of params
+        # this means we can reuse the same global addrpdict (and 
+        # its helper functions) for adding params during one pass
+        # and then adjusting params during a subsequent pass
+        if adjust:
+            print("\n--adjust was requested but will be ignored while this test has an incomplete set of result params.\nthe script will now offer to add missing params to this test's configuration\n")
+            adjust = False
+        u = input("press any key...")
+        print("\nYou can terminate script execution and manually update the test config file with the missing params, and then run this test again. Or proceed (recommended) and the missing result params will be added to this test's configuration\n")
         uadd = input("proceed and add result params? (Y/n) ")
-        if uadd in ["y", "Y"]:
+        if uadd not in ["n", "N"]:
             addrp = True
-    try:
-        generation = int(reslist[0])
-        survivors = int(reslist[1])
-        diversity = float(reslist[2])
-        genomeSize = int(reslist[3])
-        kills = int(reslist[4])
-        success = 1
-    except Exception as e:
-        print("\nexception reading logfile:" % e)
 
     #TODO conditionsals below could be done with a loop that
-    # calls a fn() addOrUpdateResultParam()
+    #   calls a fn() addOrUpdateResultParam()
     #TODO could use param 'maxgenerations' - 1 here, instead...
-    if 'generations' in rp:
-        if generation != rp['generations']:
-            print("Error: generation:: expected %i, got %i" % (rp['generations'], generation))
-            success = 0
-    elif addrp:
-        print("adding param 'result-generations = %s' to config" % generation)
-        addrpdict['result-generations'] = generation
-        success = 0
+    #   diversity-min:\t expected\t actual\t %s
+    #NOTE since Python 3.6 a dict() is insertion ordered, so
+    #   resdict will consistently iterate actual results in
+    #   expected order. nice
+    try:
+        count = 0
+        # if --adjust was passed we will store params (& vals)
+        # in this list to be confirmed for updating after
+        # displaying all results
+        adjlist = list()
+        print("\n  parameter  \t  expected\t\t   actual\n")
+        for k, v in resdict.items():
+            # handle each actual result
+            success = "Pass"
+            rstr = ""   # result parameter string
+            haverp = True
+            minmax = False
+            minstr = ""
+            maxstr = ""
+            # assign corresponding key name for rp dict()
+            if k == 'generation':
+                rstr = 'generations'
+            elif k == 'genomeSize':
+                rstr = 'genomesize'
+            elif k == 'kills':
+                rstr = 'kills'
+            # now for some min/max cases
+            elif k == 'survivors':
+                rstr = 'survivors'
+                minmax = True
+            elif k == 'diversity':
+                rstr = 'diversity'
+                minmax = True
 
-    if 'survivors-min' in rp and 'survivors-max' in rp:
-        if survivors <= rp['survivors-min'] or survivors > rp['survivors-max']:
-            print("Error: survivors:: expected %i to %i, got %i" % (rp['survivors-min'], rp['survivors-max'], survivors))
-            success = 0
-    elif addrp:
-        print("adding param 'survivors-min = %s' to config" % survivors)
-        addrpdict['result-survivors-min'] = survivors
-        print("adding param 'survivors-max = %s' to config" % survivors)
-        addrpdict['result-survivors-max'] = survivors
-        success = 0
+            if minmax:
+                minstr = rstr + '-min'
+                maxstr = rstr + '-max'
+                if minstr in rp and maxstr in rp:
+                    if v < rp[minstr] or v > rp[maxstr]:
+                        success = "Fail"
+                        count += 1
+                        # --adjust
+                        # store key and val as a tuple for
+                        # processing after displaying to the user
+                        if adjust and v < rp[minstr]:
+                            adjlist.append((minstr, v))
+                        elif adjust and v > rp[maxstr]:
+                            adjlist.append((maxstr, v))
+                            
+                else:
+                    haverp = False
+                    count += 1
+            # i.e. a regular equivalence case
+            elif rstr in rp:
+                if v != rp[rstr]:
+                    success = "Fail"
+                    count += 1
+                    # --adjust
+                    if adjust:
+                        # store for processing after display output
+                        adjlist.append((rstr, v))
+            # fallthrough: rstr is not in dict rp
+            else:
+                haverp = False
+                count += 1
 
-    if 'diversity-min' in rp and 'diversity-max' in rp:
-        if diversity < rp['diversity-min'] or diversity > rp['diversity-max']:
-            print("Error: diversity:: expected %0.4f to %0.4f, got %0.4f" % (rp['diversity-min'], rp['diversity-max'], diversity))
-            success=0
-    elif addrp:
-        print("adding param 'result-diversity-min' = %s' to config" % diversity)
-        addrpdict['result-diversity-min'] = diversity
-        print("adding param 'result-diversity-max' = %s' to config" % diversity)
-        addrpdict['result-diversity-max'] = diversity
-        success = 0
+            if addrp and not haverp:
+                add(rstr, v, minmax)
+                count += 1 if not minmax else 2
+                continue  # don't display missing param
 
-    if 'genomesize' in rp:
-        if genomeSize != rp['genomesize']:
-            print("Error: genome size:: expected %i, got %i" % (rp['genomesize'], genomeSize))
-            success = 0
-    elif addrp:
-        print("adding param 'result-genomesize = %s' to config" % genomeSize)
-        addrpdict['result-genomesize'] = genomeSize
-        success = 0
+            # display:
+            # if the user is not adding the missing result-param
+            # to the dict rp, then we must handle displaying
+            # its absence
+            if not haverp:
+                showrp = "NA"
+                success = "Fail"
+            else:
+                if minmax:
+                    showrp = "%s - %s" % (rp[minstr], rp[maxstr])
+                else: 
+                    showrp = rp[rstr]
 
-    if 'kills' in rp:
-        if kills != rp['kills']:
-            print("Error: number of kills:: expected %i, got %i" % (rp['kills'], kills))
-            success = 0
-    elif addrp:
-        print("adding param 'result-kills = %s' to config" % kills)
-        addrpdict['result-kills'] = kills
-        success = 0
+            print("  %s%s %s%s %s%s %s" % (
+                                            k, pad(k), 
+                                            showrp, pad(showrp,24),
+                                            v, pad(v),
+                                            success)
+            )
+    except Exception as e:
+        print("resultsAnalysis() exception:\n%s" % e)
+        count -= 100
 
-    if addrp:
+    # handle parameter val adjustments
+    # whether adding or adjusting, process addrpdict
+    # i.e. get param/val pairs from dict storage and set in config
+    if addrp or adjust:
+        if adjust and adjlist:
+            # eventhough minmax might be True, pass 
+            # minmax==False here since we would only be 
+            # adjusting after building a complete set of
+            # result params. Hence -min and -max params
+            # arrive here singularly (k, v in adjtuple)
+            print()
+            for t in adjlist:
+                u = input("update %s = %s ? (Y/n)" % (t[0], t[1]))
+                if u in ["n", "N"]:
+                    continue
+                add(t[0], t[1], False)
+
         updateResultParams(thisconfig, testname, addrpdict)
-        print("\nresult parameters were added\nrun the test again")
-        return
 
-    if success == 1:
-        print("\nPass")
-    else:
-        print("\nFail")
-    
+        # return 'update' here so calling script can decide
+        # whether to write to disk (config file) or another action 
+        return 'update' 
+
+    print("\ntest: %s" % ("Pass" if count==0 else "Fail"))
+
+    if count > 0:
+        print("\n%i errors\n" % count)
